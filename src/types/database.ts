@@ -44,8 +44,25 @@ export interface Lead {
   outcome: LeadOutcome | null;
   last_called_at: string | null;
   metadata_json: Record<string, unknown>;
+  list_id: string | null;
   created_at: string;
   updated_at: string;
+  list?: { id: string; name: string; color: string | null } | null;
+}
+
+/** A named group of leads — typically one per CSV import / campaign /
+ * voice-agent niche — so the Leads page can be split into sections
+ * instead of one undifferentiated pile. A lead belongs to at most one
+ * list; `lead_count` is populated by the get_lead_lists_with_counts RPC. */
+export interface LeadList {
+  id: string;
+  workspace_id: string;
+  name: string;
+  color: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  lead_count?: number;
 }
 
 export interface Workspace {
@@ -169,5 +186,9 @@ export interface LeadFilters {
   state?: string;
   lastCalledBefore?: string;
   lastCalledAfter?: string;
+  /** Show only leads in this list ("section"). Mutually exclusive with unassignedOnly. */
+  listId?: string;
+  /** Show only leads with no list assigned ("No section"). */
+  unassignedOnly?: boolean;
 }
 

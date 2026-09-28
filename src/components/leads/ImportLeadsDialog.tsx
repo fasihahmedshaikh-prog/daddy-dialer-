@@ -1,13 +1,19 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Papa from 'papaparse';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/toast';
 import { UploadCloud } from 'lucide-react';
+import type { LeadList } from '@/types/database';
+
+const NEW_LIST_VALUE = '__new';
+const NO_LIST_VALUE = '__none';
 
 const LEAD_FIELDS: { key: string; label: string; required?: boolean }[] = [
   { key: 'business_name', label: 'Business name', required: true },
@@ -42,9 +48,14 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   workspaceId: string;
   onImported: () => void;
+  /** Existing sections to import into, and whichever one is currently
+   * selected on the Leads page (pre-picked so importing while looking at
+   * a section defaults to that section, but can be changed). */
+  lists?: LeadList[];
+  defaultListId?: string;
 }
 
-export function ImportLeadsDialog({ open, onOpenChange, workspaceId, onImported }: Props) {
+export function ImportLeadsDialog({ open, onOpenChange, workspaceId, onImported, lists = [], defaultListId }: Props) {
   const { toast } = useToast();
   const [step, setStep] = useState<'upload' | 'map' | 'importing'>('upload');
   const [headers, setHeaders] = useState<string[]>([]);
@@ -52,6 +63,12 @@ export function ImportLeadsDialog({ open, onOpenChange, workspaceId, onImported 
   const [hasHeaderRow, setHasHeaderRow] = useState(true);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [fileName, setFileName] = useState('');
+  const [listChoice, setListChoice] = useState<string>(NO_LIST_VALUE);
+  const [newListName, setNewListName] = useState('');
+
+  useEffect(() => {
+    if (open) setListChoice(defaultListId ?? NO_LIST_VALUE);
+  }, [open, defaultListId]);
 
   function reset() {
     setStep('upload');
@@ -59,6 +76,7 @@ export function ImportLeadsDialog({ open, onOpenChange, workspaceId, onImported 
     setRows([]);
     setMapping({});
     setFileName('');
+    setNewListName('');
   }
 
   function handleFile(file: File) {
@@ -96,8 +114,30 @@ export function ImportLeadsDialog({ open, onOpenChange, workspaceId, onImported 
       toast('Map a Phone column before importing.', { variant: 'error' });
       return;
     }
+    if (listChoice === NEW_LIST_VALUE && !newListName.trim()) {
+      toast('Name the new section, or pick an existing one.', { variant: 'error' });
+      return;
+    }
 
     setStep('importing');
+
+    let targetListId: string | null = null;
+    if (listChoice === NEW_LIST_VALUE) {
+      const { data: newList, error: listError } = await supabase
+        .from('lead_lists')
+        .insert({ workspace_id: workspaceId, name: newListName.trim() })
+        .select('id')
+        .single();
+      if (listError) {
+        toast(`Could not create section: ${listError.message}`, { variant: 'error' });
+        setStep('map');
+        return;
+      }
+      targetListId = newList.id;
+    } else if (listChoice !== NO_LIST_VALUE) {
+      targetListId = listChoice;
+    }
+
     const payload = rows.map((r) => {
       const obj: Record<string, unknown> = {};
       for (const [col, field] of Object.entries(mapping)) {
@@ -112,6 +152,7 @@ export function ImportLeadsDialog({ open, onOpenChange, workspaceId, onImported 
     const { data, error } = await supabase.rpc('import_leads', {
       p_workspace_id: workspaceId,
       p_rows: payload,
+      p_list_id: targetListId,
     });
 
     if (error) {
@@ -166,6 +207,37 @@ export function ImportLeadsDialog({ open, onOpenChange, workspaceId, onImported 
               <div className="flex items-center gap-2 text-xs text-text-secondary">
                 <Checkbox checked={hasHeaderRow} onCheckedChange={(v) => setHasHeaderRow(!!v)} />
                 First row is a header row
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs uppercase tracking-wide text-text-tertiary">
+                  Import into section — so you know which agent/campaign these leads are for
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Select value={listChoice} onValueChange={setListChoice}>
+                    <SelectTrigger className="w-64">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_LIST_VALUE}>No section</SelectItem>
+                      {lists.map((l) => (
+                        <SelectItem key={l.id} value={l.id}>
+                          {l.name}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={NEW_LIST_VALUE}>+ Create new section…</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {listChoice === NEW_LIST_VALUE && (
+                    <Input
+                      autoFocus
+                      className="w-56"
+                      placeholder="e.g. Dental — West Coast"
+                      value={newListName}
+                      onChange={(e) => setNewListName(e.target.value)}
+                    />
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2">

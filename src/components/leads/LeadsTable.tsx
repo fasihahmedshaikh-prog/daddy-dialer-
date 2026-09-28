@@ -35,6 +35,7 @@ export function LeadsTable({
             <Checkbox checked={allSelected} onCheckedChange={onToggleSelectAll} />
           </TableHead>
           <TableHead>Business</TableHead>
+          <TableHead>Section</TableHead>
           <TableHead>Phone</TableHead>
           <TableHead>City / State</TableHead>
           <TableHead>Status</TableHead>
@@ -46,14 +47,14 @@ export function LeadsTable({
       <TableBody>
         {loading && (
           <TableRow>
-            <TableCell colSpan={8} className="py-8 text-center text-text-tertiary">
+            <TableCell colSpan={9} className="py-8 text-center text-text-tertiary">
               Loading leads…
             </TableCell>
           </TableRow>
         )}
         {!loading && leads.length === 0 && (
           <TableRow>
-            <TableCell colSpan={8} className="py-8 text-center text-text-tertiary">
+            <TableCell colSpan={9} className="py-8 text-center text-text-tertiary">
               No leads match these filters.
             </TableCell>
           </TableRow>
@@ -64,6 +65,13 @@ export function LeadsTable({
               <Checkbox checked={selected.has(lead.id)} onCheckedChange={() => onToggleSelect(lead.id)} />
             </TableCell>
             <TableCell className="font-medium">{lead.business_name}</TableCell>
+            <TableCell>
+              {lead.list ? (
+                <Badge>{lead.list.name}</Badge>
+              ) : (
+                <span className="text-xs text-text-tertiary">—</span>
+              )}
+            </TableCell>
             <TableCell className="mono-num">{formatPhoneDisplay(lead.phone)}</TableCell>
             <TableCell className="text-text-secondary">
               {[lead.city, lead.state].filter(Boolean).join(', ') || '—'}

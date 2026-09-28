@@ -11,9 +11,11 @@ export function useLeadsQuery(workspaceId: string | null, filters: LeadFilters, 
     queryFn: async () => {
       let query = supabase
         .from('leads')
-        .select('*', { count: 'exact' })
+        .select('*, list:lead_lists(id, name, color)', { count: 'exact' })
         .eq('workspace_id', workspaceId!);
 
+      if (filters.listId) query = query.eq('list_id', filters.listId);
+      if (filters.unassignedOnly) query = query.is('list_id', null);
       if (filters.search) {
         const term = filters.search.replace(/[%,]/g, '');
         query = query.or(
