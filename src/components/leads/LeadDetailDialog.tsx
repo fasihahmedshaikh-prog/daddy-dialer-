@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input, Textarea } from '@/components/ui/input';
@@ -10,7 +10,7 @@ import type { Lead, LeadStatus } from '@/types/database';
 import { STATUS_LABELS, normalizePhone } from '@/lib/utils';
 import { Phone } from 'lucide-react';
 import { useDialer } from '@/contexts/DialerContext';
-import { ConversationLog } from './ConversationLog';
+import { ConversationLog, type ConversationLogHandle } from './ConversationLog';
 
 export function LeadDetailDialog({
   lead,
@@ -25,6 +25,7 @@ export function LeadDetailDialog({
   const dialer = useDialer();
   const [form, setForm] = useState<Partial<Lead>>({});
   const [saving, setSaving] = useState(false);
+  const conversationLogRef = useRef<ConversationLogHandle>(null);
 
   useEffect(() => {
     if (lead) setForm(lead);
@@ -39,6 +40,9 @@ export function LeadDetailDialog({
 
   async function save() {
     setSaving(true);
+    // Save any conversation note left unlogged before persisting the rest
+    // of the lead edits, so closing this dialog never drops a typed note.
+    await conversationLogRef.current?.flush();
     const { error } = await supabase
       .from('leads')
       .update({
@@ -125,7 +129,7 @@ export function LeadDetailDialog({
             </div>
           </div>
 
-          <ConversationLog leadId={currentLead.id} />
+          <ConversationLog ref={conversationLogRef} key={currentLead.id} leadId={currentLead.id} />
 
           <div className="space-y-1">
             <Label>Notes</Label>

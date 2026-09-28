@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Play, Pause, Square, SkipForward, PhoneCall, Star } from 'lucide-react';
 import { useSessionQueue } from '@/hooks/useSessionQueue';
@@ -10,7 +10,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DispositionBar } from '@/components/sessions/DispositionBar';
-import { ConversationLog } from '@/components/leads/ConversationLog';
+import { ConversationLog, type ConversationLogHandle } from '@/components/leads/ConversationLog';
 import { CallStatePill } from '@/components/dialer/CallStatePill';
 import { formatPhoneDisplay, formatDuration, SESSION_STATUS_LABELS } from '@/lib/utils';
 import type { DialCallLog, LeadOutcome } from '@/types/database';
@@ -25,6 +25,7 @@ export default function SessionDialer() {
   const dialer = useDialer();
   const { session, current, remaining, queue, invalidate, loading } = useSessionQueue(sessionId);
   const [autoDialing, setAutoDialing] = useState(false);
+  const conversationLogRef = useRef<ConversationLogHandle>(null);
 
   const isDialingCurrent =
     dialer.activeCall?.sessionId === sessionId && dialer.activeCall?.leadId === current?.lead_id;
@@ -92,6 +93,10 @@ export default function SessionDialer() {
   async function commitDisposition(outcome: LeadOutcome) {
     if (!current || !workspaceId) return;
 
+    // Save any conversation note the caller typed but never explicitly hit
+    // "Log" for, so dispositioning the call doesn't silently drop it.
+    await conversationLogRef.current?.flush();
+
     dialer.hangup();
 
     const ended = dialer.lastEndedCall;
@@ -125,6 +130,7 @@ export default function SessionDialer() {
 
   async function skipCurrent() {
     if (!current) return;
+    await conversationLogRef.current?.flush();
     dialer.hangup();
     await supabase.from('session_leads').update({ status: 'skipped' }).eq('id', current.id);
     invalidate();
@@ -192,7 +198,7 @@ export default function SessionDialer() {
                   </div>
                 )}
 
-                <ConversationLog leadId={current.lead_id} />
+                <ConversationLog ref={conversationLogRef} key={current.lead_id} leadId={current.lead_id} />
 
                 <div className="flex items-center gap-2">
                   <Button
